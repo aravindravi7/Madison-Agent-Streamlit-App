@@ -39,8 +39,6 @@ Edit `.streamlit/secrets.toml`:
 - **OpenAI:** `OPENAI_API_KEY` — used when you choose “Use default key” in the app. Get a key at [platform.openai.com](https://platform.openai.com/api-keys).
 - **Gmail (optional):** `GMAIL_USER` and `GMAIL_APP_PASSWORD` (use a [Gmail App Password](https://myaccount.google.com/apppasswords); 2-Step Verification required) to enable “Send brief by email.”
 
-Do not commit `secrets.toml`; it is in `.gitignore`.
-
 ### 3. Launch
 
 ```bash
