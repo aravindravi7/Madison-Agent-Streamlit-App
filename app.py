@@ -9,6 +9,7 @@ import json
 import re
 import smtplib
 from datetime import datetime
+from email.header import Header
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.utils import parsedate_to_datetime
@@ -52,20 +53,29 @@ def get_gmail_credentials():
     return (None, None)
 
 
+def _normalize_unicode_for_email(s):
+    """Replace chars that break ASCII codec (e.g. \\xa0 non-breaking space) with safe equivalents."""
+    if not s or not isinstance(s, str):
+        return s or ""
+    return s.replace("\xa0", " ")  # non-breaking space -> space
+
+
 def send_brief_email(recipient, html_content, subject):
     """Send the research brief as HTML email to recipient. Returns (success, message)."""
     user, password = get_gmail_credentials()
     if not user or not password:
         return False, "Gmail not configured. Add GMAIL_USER and GMAIL_APP_PASSWORD to .streamlit/secrets.toml (use a Gmail App Password)."
-    recipient = (recipient or "").strip()
+    recipient = _normalize_unicode_for_email(recipient or "").strip()
     if not recipient or "@" not in recipient:
         return False, "Enter a valid email address."
     try:
+        subject_safe = _normalize_unicode_for_email(subject or "Research Brief")
+        html_safe = _normalize_unicode_for_email(html_content or "")
         msg = MIMEMultipart("alternative")
-        msg["Subject"] = subject
+        msg["Subject"] = Header(subject_safe, "utf-8")
         msg["From"] = user
         msg["To"] = recipient
-        msg.attach(MIMEText(html_content, "html", "utf-8"))
+        msg.attach(MIMEText(html_safe, "html", "utf-8"))
         with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
             server.login(user, password)
             server.sendmail(user, recipient, msg.as_string())
@@ -545,7 +555,15 @@ with st.sidebar:
             st.session_state.openai_api_key = api_key
     else:
         st.session_state.openai_api_key = ""
-        st.caption("Using the default key from app configuration.")
+        default_key_set = False
+        try:
+            default_key_set = bool(st.secrets.get("OPENAI_API_KEY"))
+        except Exception:
+            pass
+        if default_key_set:
+            st.caption("Using the default key from app configuration.")
+        else:
+            st.caption("Default key not set. Add **OPENAI_API_KEY** in app secrets (see README), or switch to \"Use my own API key\" and enter one.")
 
     st.markdown("---")
     st.subheader("Data source limits")
@@ -584,6 +602,9 @@ with st.sidebar:
         key="recipient_email",
         help="The brief will be sent to this address when you click Send.",
     )
+    # Normalize so pasted text with non-breaking space (\\xa0) doesn't cause ASCII encode errors
+    if recipient_email and "\xa0" in recipient_email:
+        st.session_state.recipient_email = _normalize_unicode_for_email(recipient_email).strip()
     gmail_ok = get_gmail_credentials()[0] is not None
     has_report = bool(st.session_state.last_report_html)
     if not gmail_ok:
@@ -593,7 +614,7 @@ with st.sidebar:
     send_btn = st.button("Send brief to my email", disabled=not gmail_ok or not has_report)
     if send_btn and recipient_email:
         success, msg = send_brief_email(
-            recipient_email,
+            _normalize_unicode_for_email(recipient_email).strip(),
             st.session_state.last_report_html,
             st.session_state.last_report_subject,
         )
