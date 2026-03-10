@@ -2,7 +2,7 @@
 
 A Streamlit app that builds AI research briefs from **Arxiv (cs.AI)** and **Smol RSS**: fetch feeds → clean & dedupe → LLM evaluation (GPT-4o-mini) → theme synthesis → HTML brief. View in the app, download as HTML, or send by email.
 
-**Live app:** [View on Streamlit Cloud](https://madison-agent-streamlit-app.streamlit.app) — 
+
 
 ---
 
