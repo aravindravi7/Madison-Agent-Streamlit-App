@@ -251,6 +251,7 @@ def _render_regret_curve(history: list[dict]) -> None:
             showline=True,
             linecolor=PANEL_BORDER,
             tickfont=dict(family="JetBrains Mono, monospace"),
+            tickformat=",.0f",
         ),
         yaxis=dict(
             title=None,
@@ -259,6 +260,7 @@ def _render_regret_curve(history: list[dict]) -> None:
             zerolinecolor=PANEL_BORDER,
             showline=False,
             tickfont=dict(family="JetBrains Mono, monospace"),
+            tickformat=",.0f",
         ),
         showlegend=True,
         legend=dict(
