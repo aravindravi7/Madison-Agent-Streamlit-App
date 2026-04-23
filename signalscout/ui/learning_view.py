@@ -411,9 +411,15 @@ def render(
         return
 
     _render_leaderboard(bandit, history)
-    st.markdown("---")
+    st.markdown(
+        "<hr style='border:none;border-top:1px solid #2A2F45;margin:20px 0;'>",
+        unsafe_allow_html=True,
+    )
     _render_regret_curve(history)
-    st.markdown("---")
+    st.markdown(
+        "<hr style='border:none;border-top:1px solid #2A2F45;margin:20px 0;'>",
+        unsafe_allow_html=True,
+    )
     # Taste summary is wrapped separately so a failure in the LLM path — or in
     # the tag-joining helpers that feed it — never prevents the leaderboard
     # and regret curve from completing. The LLM call itself has its own

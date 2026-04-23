@@ -164,7 +164,10 @@ def _render_native(container: dict[str, Any]) -> None:
                 st.markdown(f"*Meta observation:* {theme['meta_observation']}")
 
     items = container.get("included_items") or []
-    st.markdown("---")
+    st.markdown(
+        "<hr style='border:none;border-top:1px solid #2A2F45;margin:20px 0;'>",
+        unsafe_allow_html=True,
+    )
     st.subheader("Included items")
     st.caption("The score you see is the one SignalScout bet on. The Arena shows who disagreed.")
     if not items:

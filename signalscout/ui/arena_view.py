@@ -63,7 +63,10 @@ def render(*, storage: Storage | None = None, user_id: str | None = None) -> Non
         if item is None:
             continue
         _render_card(result, item, storage=storage, user_id=user_id)
-        st.markdown("---")
+        st.markdown(
+            "<hr style='border:none;border-top:1px solid #2A2F45;margin:16px 0;'>",
+            unsafe_allow_html=True,
+        )
 
 
 def _render_mood_header(*, storage: Storage, user_id: str) -> None:
@@ -88,7 +91,7 @@ def _render_mood_header(*, storage: Storage, user_id: str) -> None:
                 f'</div>',
                 unsafe_allow_html=True,
             )
-    st.markdown("<div style='height:8px;'></div>", unsafe_allow_html=True)
+    st.markdown("<div style='height:4px;'></div>", unsafe_allow_html=True)
 
 
 def _render_card(
