@@ -55,6 +55,12 @@ def _hash_email(email: str) -> str:
 
 
 def _render_sidebar(storage: Storage) -> tuple[OpenAI | None, str, int, int, int]:
+    st.sidebar.markdown(
+        "<div style=\"font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:24px;"
+        "line-height:1.1;margin-bottom:10px;color:#EAEAEA;\">"
+        "<span style=\"color:#00F5D4;margin-right:6px;\">📡</span>SignalScout</div>",
+        unsafe_allow_html=True,
+    )
     st.sidebar.header("Settings")
     demo_mode = st.sidebar.toggle(
         "Demo mode", value=st.session_state.demo_mode,
