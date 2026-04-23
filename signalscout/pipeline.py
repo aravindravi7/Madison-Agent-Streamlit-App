@@ -1,9 +1,12 @@
 """Pipeline orchestrator.
 
-Phase 2: fetch → clean → arena (three evaluators in parallel per item) →
-persist ArenaResults → theme synthesis over included items → Brief record.
-The bandit lands in Phase 3; for now the winner is whoever scored highest,
-and ``winner_reason`` is a placeholder.
+Phase 3: fetch → clean → arena (three evaluators in parallel per item) →
+TasteBandit picks winner → persist ArenaResult + context vector → theme
+synthesis over included items → Brief record.
+
+``run_arena_on_item`` is kept as a plain-max-score helper so tests and
+scripts can exercise the evaluator ensemble without instantiating the
+bandit. The production ``run_brief`` path uses the bandit.
 """
 
 from __future__ import annotations
@@ -14,9 +17,12 @@ from datetime import UTC, datetime
 from statistics import pstdev
 from typing import Any, Callable, Optional
 
+import numpy as np
 from openai import OpenAI
 
+from .bandit import TasteBandit
 from .evaluators import EVALUATORS, Evaluator
+from .features import extract_context
 from .models import ArenaResult, Brief, EvaluatorVerdict, Item
 from .sources import BUILTIN_SOURCES, clean_and_validate
 from .storage import Storage
@@ -34,33 +40,38 @@ ProgressCallback = Callable[[int, int, str], None]
 WINNER_REASON_HIGHEST_SCORE = "Highest score among evaluators"
 
 
-def run_arena_on_item(
+def _gather_verdicts(
     client: OpenAI,
     item: Item,
-    evaluators: list[Evaluator] = EVALUATORS,
-) -> ArenaResult:
-    """Run all evaluators on one item in parallel; return an ArenaResult.
-
-    Uses ``ThreadPoolExecutor(max_workers=3)`` — one thread per evaluator.
-    Wall-clock is bounded by the slowest evaluator, not the sum. The
-    highest-scoring verdict wins (bandit-driven selection lands in Phase 3).
-    """
+    evaluators: list[Evaluator],
+) -> list[EvaluatorVerdict]:
+    """Run all evaluators on one item in parallel and return their verdicts
+    in evaluator-id order for deterministic persistence."""
     verdicts: list[EvaluatorVerdict] = []
     with ThreadPoolExecutor(max_workers=max(1, len(evaluators))) as ex:
         futures = {ex.submit(ev.evaluate, client, item): ev for ev in evaluators}
         for future in as_completed(futures):
             verdicts.append(future.result())
-
     if not verdicts:
         raise RuntimeError("no verdicts produced for item")
-
-    # Deterministic ordering in the persisted verdicts regardless of completion order.
     verdicts.sort(key=lambda v: v.evaluator_id)
+    return verdicts
 
+
+def run_arena_on_item(
+    client: OpenAI,
+    item: Item,
+    evaluators: list[Evaluator] = EVALUATORS,
+) -> ArenaResult:
+    """Max-score winner (no bandit). Kept for tests, calibration, and scripts.
+
+    Production ``run_brief`` does NOT call this — it calls ``_gather_verdicts``
+    and runs winner selection through the bandit.
+    """
+    verdicts = _gather_verdicts(client, item, evaluators)
     winner = max(verdicts, key=lambda v: v.score)
     scores = [v.score for v in verdicts]
     disagreement = float(pstdev(scores)) if len(scores) > 1 else 0.0
-
     return ArenaResult(
         item_id=item.id,
         verdicts=verdicts,
@@ -73,7 +84,29 @@ def run_arena_on_item(
     )
 
 
-def _verdict_to_legacy_output(winner: EvaluatorVerdict, summary: str) -> dict[str, Any]:
+def _arena_result_from_bandit(
+    item: Item,
+    verdicts: list[EvaluatorVerdict],
+    winner_id: str,
+    winner_reason: str,
+    sampled_values: dict[str, float],
+) -> ArenaResult:
+    winner_verdict = next(v for v in verdicts if v.evaluator_id == winner_id)
+    scores = [v.score for v in verdicts]
+    disagreement = float(pstdev(scores)) if len(scores) > 1 else 0.0
+    return ArenaResult(
+        item_id=item.id,
+        verdicts=verdicts,
+        winner_id=winner_id,
+        winner_reason=winner_reason,
+        bandit_sampled_values=sampled_values,
+        final_score=winner_verdict.score,
+        final_action=winner_verdict.action,
+        disagreement=disagreement,
+    )
+
+
+def _verdict_to_legacy_output(winner: EvaluatorVerdict, summary: str, reason: str) -> dict[str, Any]:
     """Adapt the winning verdict into the legacy ``output`` dict the HTML
     renderer + email still consume. Temporary bridge until Phase 4 rebuilds
     those surfaces against the new model set."""
@@ -83,7 +116,7 @@ def _verdict_to_legacy_output(winner: EvaluatorVerdict, summary: str) -> dict[st
         "why_it_matters": winner.reasoning,
         "clean_summary": summary[:300],
         "action": winner.action,
-        "action_reason": WINNER_REASON_HIGHEST_SCORE,
+        "action_reason": reason,
     }
 
 
@@ -96,7 +129,7 @@ def _make_legacy_included_item(item: Item, result: ArenaResult) -> dict[str, Any
         "url": item.url,
         "published_at": item.published_at.isoformat(),
         "summary": item.summary,
-        "output": _verdict_to_legacy_output(winner, item.summary),
+        "output": _verdict_to_legacy_output(winner, item.summary, result.winner_reason),
     }
 
 
@@ -114,8 +147,10 @@ def run_brief(
     max_evaluate: int,
     on_progress: Optional[ProgressCallback] = None,
 ) -> dict[str, Any]:
-    """Full pipeline. Persists items + arena results + brief; returns a
-    container dict the UI layer consumes."""
+    """Full Phase 3 pipeline: fetch → arena → bandit pick → persist → synthesize."""
+    if not user_id:
+        raise ValueError("run_brief requires a non-empty user_id for bandit state")
+
     sources_by_id = {s.id: s for s in BUILTIN_SOURCES}
     arxiv = sources_by_id["arxiv_cs_ai"].fetch(arxiv_limit)
     smol = sources_by_id["smol"].fetch(smol_limit)
@@ -131,6 +166,12 @@ def run_brief(
             "included_items": [],
         }
 
+    bandit = TasteBandit(
+        user_id=user_id,
+        evaluator_ids=[e.id for e in EVALUATORS],
+        storage=storage,
+    )
+
     arena_results: list[ArenaResult] = []
     items_by_id: dict[str, Item] = {}
     total = len(limited)
@@ -139,8 +180,24 @@ def run_brief(
             on_progress(i + 1, total, f"Evaluating item {i + 1}/{total}")
         storage.upsert_item(item)
         items_by_id[item.id] = item
-        result = run_arena_on_item(client, item)
-        storage.save_arena_result(result, user_id=user_id)
+
+        verdicts = _gather_verdicts(client, item, EVALUATORS)
+        context = extract_context(item, user_id, storage)
+        winner_id, sampled_values, reason = bandit.select_trusted_evaluator(context)
+        bandit.record_pull(winner_id)  # persisted immediately
+
+        result = _arena_result_from_bandit(
+            item=item,
+            verdicts=verdicts,
+            winner_id=winner_id,
+            winner_reason=reason,
+            sampled_values=sampled_values,
+        )
+        storage.save_arena_result(
+            result,
+            user_id=user_id,
+            context_vector=context.tolist(),
+        )
         arena_results.append(result)
 
     included_arena = [r for r in arena_results if r.final_action == "include"]

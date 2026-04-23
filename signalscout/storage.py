@@ -52,6 +52,7 @@ CREATE TABLE IF NOT EXISTS arena_results (
     disagreement REAL,
     created_at TEXT NOT NULL,
     user_id TEXT DEFAULT '',
+    context_vector_json TEXT DEFAULT '',
     FOREIGN KEY (item_id) REFERENCES items(id)
 );
 
@@ -149,6 +150,10 @@ class Storage:
                 conn.execute("ALTER TABLE arena_results ADD COLUMN winner_reason TEXT DEFAULT ''")
             if "user_id" not in cols:
                 conn.execute("ALTER TABLE arena_results ADD COLUMN user_id TEXT DEFAULT ''")
+            if "context_vector_json" not in cols:
+                conn.execute(
+                    "ALTER TABLE arena_results ADD COLUMN context_vector_json TEXT DEFAULT ''"
+                )
             conn.executescript(_POST_MIGRATION_INDEXES)
 
     # ------------------------------------------------------------------ items
@@ -181,22 +186,29 @@ class Storage:
 
     # ------------------------------------------------------------ arena_results
 
-    def save_arena_result(self, result: ArenaResult, user_id: str = "") -> None:
+    def save_arena_result(
+        self,
+        result: ArenaResult,
+        user_id: str = "",
+        context_vector: list[float] | None = None,
+    ) -> None:
         """Insert or replace the arena result for an item.
 
         ``user_id`` scopes the result to a user for mood / per-user analytics.
-        Passing ``""`` keeps Phase-1-era tests (which predate user-scoping)
-        working without modification.
+        ``context_vector`` is the bandit's 15-dim feature vector captured at
+        decision time; stored so feedback that arrives late can still update
+        the bandit against the frozen context.
         """
+        ctx_json = json.dumps(list(context_vector)) if context_vector is not None else ""
         with self._connect() as conn:
             conn.execute(
                 """
                 INSERT INTO arena_results (
                     item_id, verdicts_json, winner_id, winner_reason,
                     bandit_sampled_values_json, final_score, final_action,
-                    disagreement, created_at, user_id
+                    disagreement, created_at, user_id, context_vector_json
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(item_id) DO UPDATE SET
                     verdicts_json=excluded.verdicts_json,
                     winner_id=excluded.winner_id,
@@ -206,7 +218,8 @@ class Storage:
                     final_action=excluded.final_action,
                     disagreement=excluded.disagreement,
                     created_at=excluded.created_at,
-                    user_id=excluded.user_id
+                    user_id=excluded.user_id,
+                    context_vector_json=excluded.context_vector_json
                 """,
                 (
                     result.item_id,
@@ -219,6 +232,7 @@ class Storage:
                     result.disagreement,
                     _iso(datetime.now(UTC)),
                     user_id,
+                    ctx_json,
                 ),
             )
 
@@ -240,6 +254,23 @@ class Storage:
             final_action=row["final_action"],
             disagreement=float(row["disagreement"]),
         )
+
+    def get_context_vector_for_item(self, item_id: str) -> list[float] | None:
+        """Return the context vector captured at decision time, or None if absent."""
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT context_vector_json FROM arena_results WHERE item_id = ?",
+                (item_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        raw = row["context_vector_json"] or ""
+        if not raw:
+            return None
+        try:
+            return [float(x) for x in json.loads(raw)]
+        except (ValueError, json.JSONDecodeError):
+            return None
 
     # ---------------------------------------------------------------- feedback
 
@@ -301,6 +332,19 @@ class Storage:
             )
             for r in rows
         }
+
+    def get_total_pulls(self, user_id: str) -> int:
+        """Sum of ``n_pulls`` across all bandit arms for this user.
+
+        Used by the bandit's cold-start logic (first ``COLD_START_PULLS``
+        decisions across the whole user history are round-robin).
+        """
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT COALESCE(SUM(n_pulls), 0) AS total FROM bandit_arm_state WHERE user_id = ?",
+                (user_id,),
+            ).fetchone()
+        return int(row["total"]) if row is not None else 0
 
     def save_bandit_state(
         self, user_id: str, state: dict[str, BanditArmState]

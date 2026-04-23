@@ -116,10 +116,11 @@ def _render_card(
 
     winner_ev = evaluator_by_id(result.winner_id)
     winner_label = winner_ev.name if winner_ev else result.winner_id
+    reason_text = result.winner_reason or "Highest score among evaluators"
     st.markdown(
         f'<div style="margin-top:10px;display:flex;gap:12px;align-items:center;">'
-        f'<span style="color:#EAEAEA;">Winner: <b>{winner_label}</b>. '
-        f"Reason: {result.winner_reason or 'Highest score among evaluators'}.</span>"
+        f'<span style="color:#EAEAEA;">Winner: <b>{_escape(winner_label)}</b>. '
+        f'{_escape(reason_text)}</span>'
         f"{C.disagreement_badge(result.disagreement)}"
         f"</div>",
         unsafe_allow_html=True,

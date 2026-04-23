@@ -9,9 +9,11 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
+import numpy as np
 import streamlit as st
 
-from ..evaluators import Evaluator
+from ..bandit import REWARD_MAP, TasteBandit
+from ..evaluators import EVALUATORS, Evaluator
 from ..models import EvaluatorVerdict, Feedback, Item
 from ..storage import Storage
 
@@ -105,7 +107,16 @@ def feedback_row(
     storage: Storage,
     url: str | None = None,
 ) -> None:
-    """Render the four feedback buttons. Writes to storage; shows a toast."""
+    """Render the four feedback buttons.
+
+    On a NEW feedback event, this also applies the bandit update against
+    the context vector that was frozen at decision time (loaded from
+    ``arena_results.context_vector_json``). Duplicate feedback — a click
+    on a signal we've already recorded — is a no-op for the bandit,
+    enforced by the unique ``(item_id, user_id, signal)`` index on the
+    feedback table: ``save_feedback`` returns ``False`` and we skip the
+    bandit update.
+    """
     cols = st.columns([1, 1, 1, 1])
     buttons: list[tuple[str, str, Any]] = [
         ("👍 Useful", "thumbs_up", cols[0]),
@@ -125,12 +136,51 @@ def feedback_row(
                     )
                 )
                 if inserted:
+                    _apply_bandit_update(
+                        item_id=item_id,
+                        winner_id=winner_id,
+                        signal=signal,
+                        user_id=user_id,
+                        storage=storage,
+                    )
                     st.toast(f"Feedback logged: {signal}.")
                 else:
                     st.toast(f"Already logged: {signal}.")
     with cols[3]:
         if url:
             st.link_button("Read full ↗", url)
+
+
+def _apply_bandit_update(
+    *,
+    item_id: str,
+    winner_id: str,
+    signal: str,
+    user_id: str,
+    storage: Storage,
+) -> None:
+    """Pull the context vector frozen at decision time and apply the reward.
+
+    If the context vector isn't available (Phase-2 rows predate this column),
+    the update is silently skipped — the feedback is still persisted, we
+    just can't learn from it.
+    """
+    vec = storage.get_context_vector_for_item(item_id)
+    if vec is None:
+        return
+    reward = REWARD_MAP.get(signal)
+    if reward is None:
+        return
+    bandit = TasteBandit(
+        user_id=user_id,
+        evaluator_ids=[e.id for e in EVALUATORS],
+        storage=storage,
+    )
+    bandit.update_from_feedback(
+        evaluator_id=winner_id,
+        context=np.asarray(vec, dtype=np.float64),
+        reward=reward,
+    )
 
 
 def _escape(s: str) -> str:
