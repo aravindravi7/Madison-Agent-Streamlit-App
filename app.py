@@ -13,13 +13,12 @@ from openai import OpenAI
 from streamlit.errors import StreamlitSecretNotFoundError
 
 from signalscout.bandit import TasteBandit
+from signalscout.demo_seed import DEMO_USER_ID, seed_demo_user
 from signalscout.email_brief import send_brief_email
 from signalscout.evaluators import EVALUATORS
 from signalscout.storage import Storage
 from signalscout.ui import arena_view, brief_view, learning_view
 from signalscout.ui.theme import inject_theme
-
-DEMO_USER_ID = "demo_user"
 _DEFAULTS = {
     "user_email": "", "user_id": "", "openai_key_source": "default",
     "demo_mode": False, "last_report_html": None,
@@ -55,16 +54,22 @@ def _hash_email(email: str) -> str:
     return hashlib.sha256(email.strip().lower().encode("utf-8")).hexdigest()[:16]
 
 
-def _render_sidebar() -> tuple[OpenAI | None, str, int, int, int]:
+def _render_sidebar(storage: Storage) -> tuple[OpenAI | None, str, int, int, int]:
     st.sidebar.header("Settings")
     demo_mode = st.sidebar.toggle(
         "Demo mode", value=st.session_state.demo_mode,
-        help="Locks user_id to `demo_user` and uses the default key. Phase 3 pre-seeds bandit state here.",
+        help="Locks user_id to `demo_user` and uses the default key.",
     )
     st.session_state.demo_mode = demo_mode
     if demo_mode:
         user_id = DEMO_USER_ID
         st.sidebar.caption(f"user_id: `{user_id}`")
+        if st.sidebar.button("Seed demo data", help="Populate demo_user with 30 decisions + feedback."):
+            n = seed_demo_user(storage)
+            if n > 0:
+                st.sidebar.success(f"Seeded {n} decisions for demo_user. Open Arena + Learning tabs to see the state.")
+            else:
+                st.sidebar.info("Demo data already present.")
     else:
         email = st.sidebar.text_input(
             "Your email (establishes a stable user id for learning)",
@@ -129,7 +134,7 @@ def main() -> None:
     st.title("📡 SignalScout")
     st.caption("Your taste, on autopilot.")
 
-    client, user_id, arxiv_limit, smol_limit, max_evaluate = _render_sidebar()
+    client, user_id, arxiv_limit, smol_limit, max_evaluate = _render_sidebar(storage)
 
     bandit = None
     if user_id:
