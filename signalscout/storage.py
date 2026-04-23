@@ -255,6 +255,83 @@ class Storage:
             disagreement=float(row["disagreement"]),
         )
 
+    def get_decision_history(
+        self,
+        user_id: str,
+        limit: int = 500,
+    ) -> list[dict]:
+        """Chronological decision history for this user, one row per item.
+
+        Each row:
+            {
+                "item_id": str,
+                "winner_id": str,
+                "final_score": int,
+                "timestamp": str,  # ISO 8601, decision time (arena_results.created_at)
+                "feedback_signal": str | None,  # latest feedback signal on this item
+                "feedback_reward": float | None,  # sum of mapped rewards across signals
+            }
+
+        LEFT JOIN arena_results with feedback on (item_id, user_id). If a user
+        gave multiple signals on the same item (e.g. 👍 + 🔖), rewards are
+        summed and the most recent signal is reported. Items with no feedback
+        yet yield ``feedback_signal=None, feedback_reward=None``.
+        """
+        # The reward map lives in bandit.py; duplicated here as a CASE so the
+        # SQL-side sum is self-contained. Any divergence is caught by tests.
+        sql = """
+            SELECT
+                a.item_id,
+                a.winner_id,
+                a.final_score,
+                a.created_at,
+                (
+                    SELECT COUNT(*) FROM feedback f
+                    WHERE f.item_id = a.item_id AND f.user_id = a.user_id
+                ) AS n_feedback,
+                (
+                    SELECT SUM(
+                        CASE f.signal
+                            WHEN 'thumbs_up'   THEN  1.0
+                            WHEN 'saved'       THEN  1.0
+                            WHEN 'clicked'     THEN  0.3
+                            WHEN 'dismissed'   THEN -0.5
+                            WHEN 'thumbs_down' THEN -1.0
+                            ELSE 0.0
+                        END
+                    )
+                    FROM feedback f
+                    WHERE f.item_id = a.item_id AND f.user_id = a.user_id
+                ) AS reward_sum,
+                (
+                    SELECT f.signal
+                    FROM feedback f
+                    WHERE f.item_id = a.item_id AND f.user_id = a.user_id
+                    ORDER BY f.timestamp DESC
+                    LIMIT 1
+                ) AS latest_signal
+            FROM arena_results a
+            WHERE a.user_id = ?
+            ORDER BY a.created_at ASC
+            LIMIT ?
+        """
+        with self._connect() as conn:
+            rows = conn.execute(sql, (user_id, int(max(1, limit)))).fetchall()
+        out: list[dict] = []
+        for r in rows:
+            has_feedback = int(r["n_feedback"] or 0) > 0
+            out.append(
+                {
+                    "item_id": r["item_id"],
+                    "winner_id": r["winner_id"],
+                    "final_score": int(r["final_score"] or 0),
+                    "timestamp": r["created_at"],
+                    "feedback_signal": r["latest_signal"] if has_feedback else None,
+                    "feedback_reward": float(r["reward_sum"]) if has_feedback else None,
+                }
+            )
+        return out
+
     def get_context_vector_for_item(self, item_id: str) -> list[float] | None:
         """Return the context vector captured at decision time, or None if absent."""
         with self._connect() as conn:

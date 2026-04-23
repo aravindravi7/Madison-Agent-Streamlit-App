@@ -12,7 +12,9 @@ import streamlit as st
 from openai import OpenAI
 from streamlit.errors import StreamlitSecretNotFoundError
 
+from signalscout.bandit import TasteBandit
 from signalscout.email_brief import send_brief_email
+from signalscout.evaluators import EVALUATORS
 from signalscout.storage import Storage
 from signalscout.ui import arena_view, brief_view, learning_view
 from signalscout.ui.theme import inject_theme
@@ -129,6 +131,14 @@ def main() -> None:
 
     client, user_id, arxiv_limit, smol_limit, max_evaluate = _render_sidebar()
 
+    bandit = None
+    if user_id:
+        bandit = TasteBandit(
+            user_id=user_id,
+            evaluator_ids=[e.id for e in EVALUATORS],
+            storage=storage,
+        )
+
     run_tab, arena_tab, learning_tab = st.tabs(["Run", "Arena", "Learning"])
     with run_tab:
         brief_view.render(
@@ -138,7 +148,7 @@ def main() -> None:
     with arena_tab:
         arena_view.render(storage=storage, user_id=user_id)
     with learning_tab:
-        learning_view.render()
+        learning_view.render(storage=storage, bandit=bandit, user_id=user_id, client=client)
 
 
 main()

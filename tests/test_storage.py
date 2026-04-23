@@ -289,6 +289,115 @@ def test_winner_reason_round_trip(tmp_path: Path) -> None:
     assert loaded.winner_reason == "Highest score among evaluators"
 
 
+def test_decision_history_joins_arena_with_feedback(tmp_path: Path) -> None:
+    """LEFT JOIN contract: all arena rows surface, feedback fields are None
+    when absent, summed when multiple signals land on the same item."""
+    s = _fresh_storage(tmp_path)
+    s.upsert_item(_make_item("1"))
+    s.upsert_item(_make_item("2"))
+    s.upsert_item(_make_item("3"))
+
+    # Item 1: 👍 + 🔖 → reward 2.0, latest signal = saved
+    s.save_arena_result(
+        ArenaResult(
+            item_id="item-1",
+            verdicts=[_make_verdict("scout", 85), _make_verdict("skeptic", 60)],
+            winner_id="scout", winner_reason="Learned preference",
+            bandit_sampled_values={}, final_score=85, final_action="include",
+            disagreement=12.5,
+        ),
+        user_id="u1",
+    )
+    s.save_feedback(Feedback(item_id="item-1", user_id="u1", signal="thumbs_up",
+                             evaluator_id="scout", timestamp=datetime(2024, 6, 1, 10, tzinfo=timezone.utc)))
+    s.save_feedback(Feedback(item_id="item-1", user_id="u1", signal="saved",
+                             evaluator_id="scout", timestamp=datetime(2024, 6, 1, 11, tzinfo=timezone.utc)))
+
+    # Item 2: no feedback
+    s.save_arena_result(
+        ArenaResult(
+            item_id="item-2",
+            verdicts=[_make_verdict("skeptic", 55)],
+            winner_id="skeptic", winner_reason="Calibrating — round 2 of 10",
+            bandit_sampled_values={}, final_score=55, final_action="skip",
+            disagreement=0.0,
+        ),
+        user_id="u1",
+    )
+
+    # Item 3: 👎 only → reward -1.0
+    s.save_arena_result(
+        ArenaResult(
+            item_id="item-3",
+            verdicts=[_make_verdict("operator", 70)],
+            winner_id="operator", winner_reason="Learned preference",
+            bandit_sampled_values={}, final_score=70, final_action="skip",
+            disagreement=0.0,
+        ),
+        user_id="u1",
+    )
+    s.save_feedback(Feedback(item_id="item-3", user_id="u1", signal="thumbs_down",
+                             evaluator_id="operator", timestamp=datetime(2024, 6, 1, 12, tzinfo=timezone.utc)))
+
+    history = s.get_decision_history("u1")
+    assert [r["item_id"] for r in history] == ["item-1", "item-2", "item-3"]
+
+    row_1 = history[0]
+    assert row_1["winner_id"] == "scout"
+    assert row_1["feedback_signal"] == "saved"  # latest of the two
+    assert row_1["feedback_reward"] == 2.0      # 1.0 + 1.0
+
+    row_2 = history[1]
+    assert row_2["feedback_signal"] is None
+    assert row_2["feedback_reward"] is None
+
+    row_3 = history[2]
+    assert row_3["feedback_signal"] == "thumbs_down"
+    assert row_3["feedback_reward"] == -1.0
+
+
+def test_decision_history_is_user_scoped(tmp_path: Path) -> None:
+    s = _fresh_storage(tmp_path)
+    s.upsert_item(_make_item("a"))
+    s.save_arena_result(
+        ArenaResult(
+            item_id="item-a",
+            verdicts=[_make_verdict("scout", 80)],
+            winner_id="scout", winner_reason="Learned preference",
+            bandit_sampled_values={}, final_score=80, final_action="include",
+            disagreement=0.0,
+        ),
+        user_id="u1",
+    )
+    s.save_feedback(Feedback(item_id="item-a", user_id="u2", signal="thumbs_up",
+                             evaluator_id="scout",
+                             timestamp=datetime(2024, 6, 1, tzinfo=timezone.utc)))
+    # u1's feedback stays empty even though u2 gave one — scope respected.
+    u1 = s.get_decision_history("u1")
+    assert len(u1) == 1
+    assert u1[0]["feedback_signal"] is None
+    u2 = s.get_decision_history("u2")
+    # u2 has no arena_results scoped to them, so the history is empty.
+    assert u2 == []
+
+
+def test_decision_history_respects_limit(tmp_path: Path) -> None:
+    s = _fresh_storage(tmp_path)
+    for i in range(5):
+        s.upsert_item(_make_item(str(i)))
+        s.save_arena_result(
+            ArenaResult(
+                item_id=f"item-{i}",
+                verdicts=[_make_verdict("scout", 80)],
+                winner_id="scout", winner_reason="Learned preference",
+                bandit_sampled_values={}, final_score=80, final_action="include",
+                disagreement=0.0,
+            ),
+            user_id="u1",
+        )
+    assert len(s.get_decision_history("u1", limit=3)) == 3
+
+
 def test_feedback_idempotency_on_item_user_signal(tmp_path: Path) -> None:
     """Re-clicking 👍 on the same item must be a no-op (unique index)."""
     s = _fresh_storage(tmp_path)
