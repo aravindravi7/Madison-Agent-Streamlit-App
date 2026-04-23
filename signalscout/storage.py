@@ -45,11 +45,13 @@ CREATE TABLE IF NOT EXISTS arena_results (
     item_id TEXT PRIMARY KEY,
     verdicts_json TEXT NOT NULL,
     winner_id TEXT NOT NULL,
+    winner_reason TEXT DEFAULT '',
     bandit_sampled_values_json TEXT,
     final_score INTEGER,
     final_action TEXT,
     disagreement REAL,
     created_at TEXT NOT NULL,
+    user_id TEXT DEFAULT '',
     FOREIGN KEY (item_id) REFERENCES items(id)
 );
 
@@ -85,6 +87,15 @@ CREATE TABLE IF NOT EXISTS bandit_arm_state (
 CREATE INDEX IF NOT EXISTS idx_feedback_item ON feedback(item_id);
 CREATE INDEX IF NOT EXISTS idx_feedback_user ON feedback(user_id);
 CREATE INDEX IF NOT EXISTS idx_arena_created ON arena_results(created_at);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_feedback_unique
+    ON feedback(item_id, user_id, signal);
+"""
+
+# Indexes that depend on columns added by migrations — applied AFTER the
+# ``ALTER TABLE`` statements in ``init_db`` so a pre-migration DB doesn't
+# blow up trying to index a column that doesn't exist yet.
+_POST_MIGRATION_INDEXES = """
+CREATE INDEX IF NOT EXISTS idx_arena_user ON arena_results(user_id);
 """
 
 
@@ -125,9 +136,20 @@ class Storage:
             conn.close()
 
     def init_db(self) -> None:
-        """Create all tables and indexes. Idempotent — safe to call repeatedly."""
+        """Create all tables and indexes. Idempotent — safe to call repeatedly.
+
+        Also applies in-place migrations for schema additions made in later
+        phases (e.g. ``arena_results.winner_reason`` was introduced in Phase 2;
+        a Phase-1 DB is migrated on first open).
+        """
         with self._connect() as conn:
             conn.executescript(_SCHEMA)
+            cols = {r["name"] for r in conn.execute("PRAGMA table_info(arena_results)")}
+            if "winner_reason" not in cols:
+                conn.execute("ALTER TABLE arena_results ADD COLUMN winner_reason TEXT DEFAULT ''")
+            if "user_id" not in cols:
+                conn.execute("ALTER TABLE arena_results ADD COLUMN user_id TEXT DEFAULT ''")
+            conn.executescript(_POST_MIGRATION_INDEXES)
 
     # ------------------------------------------------------------------ items
 
@@ -159,34 +181,44 @@ class Storage:
 
     # ------------------------------------------------------------ arena_results
 
-    def save_arena_result(self, result: ArenaResult) -> None:
-        """Insert or replace the arena result for an item."""
+    def save_arena_result(self, result: ArenaResult, user_id: str = "") -> None:
+        """Insert or replace the arena result for an item.
+
+        ``user_id`` scopes the result to a user for mood / per-user analytics.
+        Passing ``""`` keeps Phase-1-era tests (which predate user-scoping)
+        working without modification.
+        """
         with self._connect() as conn:
             conn.execute(
                 """
                 INSERT INTO arena_results (
-                    item_id, verdicts_json, winner_id, bandit_sampled_values_json,
-                    final_score, final_action, disagreement, created_at
+                    item_id, verdicts_json, winner_id, winner_reason,
+                    bandit_sampled_values_json, final_score, final_action,
+                    disagreement, created_at, user_id
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(item_id) DO UPDATE SET
                     verdicts_json=excluded.verdicts_json,
                     winner_id=excluded.winner_id,
+                    winner_reason=excluded.winner_reason,
                     bandit_sampled_values_json=excluded.bandit_sampled_values_json,
                     final_score=excluded.final_score,
                     final_action=excluded.final_action,
                     disagreement=excluded.disagreement,
-                    created_at=excluded.created_at
+                    created_at=excluded.created_at,
+                    user_id=excluded.user_id
                 """,
                 (
                     result.item_id,
                     _verdicts_to_json(result.verdicts),
                     result.winner_id,
+                    result.winner_reason,
                     json.dumps(result.bandit_sampled_values),
                     result.final_score,
                     result.final_action,
                     result.disagreement,
                     _iso(datetime.now(UTC)),
+                    user_id,
                 ),
             )
 
@@ -202,7 +234,7 @@ class Storage:
             item_id=row["item_id"],
             verdicts=_verdicts_from_json(row["verdicts_json"]),
             winner_id=row["winner_id"],
-            winner_reason="",
+            winner_reason=row["winner_reason"] or "",
             bandit_sampled_values=json.loads(row["bandit_sampled_values_json"] or "{}"),
             final_score=int(row["final_score"]),
             final_action=row["final_action"],
@@ -211,12 +243,16 @@ class Storage:
 
     # ---------------------------------------------------------------- feedback
 
-    def save_feedback(self, feedback: Feedback) -> None:
-        """Append a feedback row (id auto-assigned)."""
+    def save_feedback(self, feedback: Feedback) -> bool:
+        """Append a feedback row. Returns ``True`` if inserted, ``False`` on duplicate.
+
+        Idempotency is enforced by a unique index on ``(item_id, user_id, signal)``;
+        re-clicking 👍 on the same item is a no-op.
+        """
         with self._connect() as conn:
-            conn.execute(
+            cur = conn.execute(
                 """
-                INSERT INTO feedback (item_id, user_id, signal, evaluator_id, timestamp)
+                INSERT OR IGNORE INTO feedback (item_id, user_id, signal, evaluator_id, timestamp)
                 VALUES (?, ?, ?, ?, ?)
                 """,
                 (
@@ -227,6 +263,7 @@ class Storage:
                     _iso(feedback.timestamp),
                 ),
             )
+            return cur.rowcount > 0
 
     def get_feedback_for_user(self, user_id: str) -> list[Feedback]:
         """All feedback rows for a given user, newest first."""
@@ -349,6 +386,40 @@ class Storage:
             )
             for r in rows
         ]
+
+    # ------------------------------------------------------------ verdicts
+
+    def get_recent_verdicts_for_evaluator(
+        self,
+        evaluator_id: str,
+        user_id: str,
+        limit: int = 20,
+    ) -> list[EvaluatorVerdict]:
+        """Most recent ``limit`` verdicts from this evaluator for this user.
+
+        Spans all items the user has processed. Used by ``moods.compute_mood``.
+        Empty list if there are none.
+        """
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT verdicts_json
+                FROM arena_results
+                WHERE user_id = ?
+                ORDER BY created_at DESC
+                LIMIT ?
+                """,
+                (user_id, int(max(1, limit * 3))),
+            ).fetchall()
+        out: list[EvaluatorVerdict] = []
+        for r in rows:
+            for verdict in _verdicts_from_json(r["verdicts_json"]):
+                if verdict.evaluator_id == evaluator_id:
+                    out.append(verdict)
+                    if len(out) >= int(limit):
+                        return out
+                    break
+        return out
 
     # ---------------------------------------------------------- leaderboard
 

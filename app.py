@@ -17,6 +17,13 @@ from signalscout.storage import Storage
 from signalscout.ui import arena_view, brief_view, learning_view
 from signalscout.ui.theme import inject_theme
 
+DEMO_USER_ID = "demo_user"
+_DEFAULTS = {
+    "user_email": "", "user_id": "", "openai_key_source": "default",
+    "demo_mode": False, "last_report_html": None,
+    "last_report_subject": "", "last_container": None,
+}
+
 
 def _secret(*keys: str) -> str | None:
     try:
@@ -36,55 +43,50 @@ def _gmail_creds() -> tuple[str, str] | None:
 
 
 def _get_client(key_source: str, own_key: str) -> OpenAI | None:
-    api_key = own_key if key_source == "own" else _secret("OPENAI_API_KEY")
-    return OpenAI(api_key=api_key) if api_key else None
+    if key_source == "own" and own_key:
+        return OpenAI(api_key=own_key)
+    default = _secret("OPENAI_API_KEY")
+    return OpenAI(api_key=default) if default else None
 
 
 def _hash_email(email: str) -> str:
     return hashlib.sha256(email.strip().lower().encode("utf-8")).hexdigest()[:16]
 
 
-def _ensure_session_state() -> None:
-    st.session_state.setdefault("user_email", "")
-    st.session_state.setdefault("user_id", "")
-    st.session_state.setdefault("openai_key_source", "default")
-    st.session_state.setdefault("openai_api_key", "")
-    st.session_state.setdefault("last_report_html", None)
-    st.session_state.setdefault("last_report_subject", "")
-    st.session_state.setdefault("last_report_container", None)
-
-
-def _render_sidebar() -> tuple[OpenAI | None, int, int, int]:
+def _render_sidebar() -> tuple[OpenAI | None, str, int, int, int]:
     st.sidebar.header("Settings")
-
-    email = st.sidebar.text_input(
-        "Your email (establishes a stable user id for learning)",
-        value=st.session_state.user_email,
-        placeholder="you@example.com",
-        help="Hashed locally. The bandit persists its state against this id.",
+    demo_mode = st.sidebar.toggle(
+        "Demo mode", value=st.session_state.demo_mode,
+        help="Locks user_id to `demo_user` and uses the default key. Phase 3 pre-seeds bandit state here.",
     )
-    if email and email != st.session_state.user_email:
-        st.session_state.user_email = email
-        st.session_state.user_id = _hash_email(email)
-    if st.session_state.user_id:
-        st.sidebar.caption(f"user_id: `{st.session_state.user_id}`")
+    st.session_state.demo_mode = demo_mode
+    if demo_mode:
+        user_id = DEMO_USER_ID
+        st.sidebar.caption(f"user_id: `{user_id}`")
+    else:
+        email = st.sidebar.text_input(
+            "Your email (establishes a stable user id for learning)",
+            value=st.session_state.user_email, placeholder="you@example.com",
+        )
+        if email and email != st.session_state.user_email:
+            st.session_state.user_email = email
+            st.session_state.user_id = _hash_email(email)
+        user_id = st.session_state.user_id
+        if user_id:
+            st.sidebar.caption(f"user_id: `{user_id}`")
 
     st.sidebar.markdown("---")
     key_source = st.sidebar.radio(
-        "OpenAI API Key",
-        options=["default", "own"],
+        "OpenAI API Key", options=["default", "own"],
         format_func=lambda x: "Use default key (app config)" if x == "default" else "Use my own key",
         index=0 if st.session_state.openai_key_source == "default" else 1,
+        disabled=demo_mode, help="Demo mode forces the default key.",
     )
-    st.session_state.openai_key_source = key_source
+    st.session_state.openai_key_source = key_source if not demo_mode else "default"
     own_key = ""
-    if key_source == "own":
+    if key_source == "own" and not demo_mode:
         own_key = st.sidebar.text_input("Your OpenAI API Key", type="password")
-        st.session_state.openai_api_key = own_key
-    else:
-        st.session_state.openai_api_key = ""
-
-    client = _get_client(key_source, own_key)
+    client = _get_client(st.session_state.openai_key_source, own_key)
 
     st.sidebar.markdown("---")
     st.sidebar.subheader("Data source limits")
@@ -104,39 +106,37 @@ def _render_sidebar() -> tuple[OpenAI | None, int, int, int]:
     if st.sidebar.button("Send brief to my email", disabled=not creds or not has_report):
         if creds and recipient:
             ok, msg = send_brief_email(
-                recipient,
-                st.session_state.last_report_html or "",
-                st.session_state.last_report_subject,
-                creds,
+                recipient, st.session_state.last_report_html or "",
+                st.session_state.last_report_subject, creds,
             )
             (st.sidebar.success if ok else st.sidebar.error)(msg)
 
-    return client, int(arxiv_limit), int(smol_limit), int(max_evaluate)
+    return client, user_id, int(arxiv_limit), int(smol_limit), int(max_evaluate)
 
 
 def main() -> None:
     st.set_page_config(page_title="SignalScout", page_icon="📡", layout="wide")
     inject_theme()
-    _ensure_session_state()
+    for k, v in _DEFAULTS.items():
+        st.session_state.setdefault(k, v)
 
     storage = Storage()
     storage.init_db()
+    st.session_state["storage"] = storage
 
     st.title("📡 SignalScout")
     st.caption("Your taste, on autopilot.")
 
-    client, arxiv_limit, smol_limit, max_evaluate = _render_sidebar()
+    client, user_id, arxiv_limit, smol_limit, max_evaluate = _render_sidebar()
 
     run_tab, arena_tab, learning_tab = st.tabs(["Run", "Arena", "Learning"])
     with run_tab:
         brief_view.render(
-            client=client,
-            arxiv_limit=arxiv_limit,
-            smol_limit=smol_limit,
-            max_evaluate=max_evaluate,
+            client=client, storage=storage, user_id=user_id,
+            arxiv_limit=arxiv_limit, smol_limit=smol_limit, max_evaluate=max_evaluate,
         )
     with arena_tab:
-        arena_view.render()
+        arena_view.render(storage=storage, user_id=user_id)
     with learning_tab:
         learning_view.render()
 

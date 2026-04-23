@@ -266,3 +266,46 @@ def test_returns_are_pydantic_models(tmp_path: Path) -> None:
     arena = s.get_arena_result("item-a")
     assert isinstance(arena, ArenaResult)
     assert all(isinstance(v, EvaluatorVerdict) for v in arena.verdicts)
+
+
+def test_winner_reason_round_trip(tmp_path: Path) -> None:
+    """Phase 2 added the winner_reason column — it must persist + restore."""
+    s = _fresh_storage(tmp_path)
+    s.upsert_item(_make_item("wr"))
+    s.save_arena_result(
+        ArenaResult(
+            item_id="item-wr",
+            verdicts=[_make_verdict("skeptic", 65), _make_verdict("scout", 85)],
+            winner_id="scout",
+            winner_reason="Highest score among evaluators",
+            bandit_sampled_values={},
+            final_score=85,
+            final_action="include",
+            disagreement=10.0,
+        )
+    )
+    loaded = s.get_arena_result("item-wr")
+    assert loaded is not None
+    assert loaded.winner_reason == "Highest score among evaluators"
+
+
+def test_feedback_idempotency_on_item_user_signal(tmp_path: Path) -> None:
+    """Re-clicking 👍 on the same item must be a no-op (unique index)."""
+    s = _fresh_storage(tmp_path)
+    fb = Feedback(
+        item_id="item-dup",
+        user_id="user-dup",
+        signal="thumbs_up",
+        evaluator_id="scout",
+        timestamp=datetime(2024, 6, 10, 12, 0, 0, tzinfo=timezone.utc),
+    )
+    inserted_first = s.save_feedback(fb)
+    inserted_second = s.save_feedback(fb)
+    rows = s.get_feedback_for_user("user-dup")
+    assert inserted_first is True
+    assert inserted_second is False
+    assert len(rows) == 1
+    # A different signal on the same item still goes through.
+    other = fb.model_copy(update={"signal": "saved"})
+    assert s.save_feedback(other) is True
+    assert len(s.get_feedback_for_user("user-dup")) == 2

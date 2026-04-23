@@ -1,7 +1,8 @@
-"""Run tab: drives the pipeline end-to-end and renders the resulting brief.
+"""Run tab: drives the Phase 2 pipeline and renders the resulting brief.
 
-Native-Streamlit summary + HTML preview + download. This is the only
-non-stub view in Phase 1 — it proves the refactor didn't break anything.
+The Arena tab shows per-item evaluator competition; the Run tab is the
+brief itself — theme synthesis + the included items summarized from the
+winning verdict. HTML download + email continue to work.
 """
 
 from __future__ import annotations
@@ -9,8 +10,10 @@ from __future__ import annotations
 from typing import Any
 
 import streamlit as st
+from openai import OpenAI
 
-from ..pipeline import run_workflow
+from ..pipeline import run_brief
+from ..storage import Storage
 
 __all__ = ["render", "build_report_html"]
 
@@ -23,29 +26,26 @@ def _esc(s: Any) -> str:
 
 
 def _get_score(it: dict[str, Any]) -> int:
-    o = it.get("output") or it
-    return int(o.get("eval_relevance_score") or o.get("score") or 0)
+    o = it.get("output") or {}
+    return int(o.get("eval_relevance_score") or 0)
 
 
 def _get_tags(it: dict[str, Any]) -> str:
-    o = it.get("output") or it
-    t = o.get("topic_tags") or o.get("tags") or []
-    return ", ".join(t) if isinstance(t, list) else str(t)
+    tags = (it.get("output") or {}).get("topic_tags") or []
+    return ", ".join(tags) if isinstance(tags, list) else str(tags)
 
 
 def _get_summary(it: dict[str, Any]) -> str:
-    o = it.get("output") or it
-    return o.get("clean_summary") or o.get("summary", "")
+    o = it.get("output") or {}
+    return o.get("clean_summary") or it.get("summary", "")
 
 
 def _get_why(it: dict[str, Any]) -> str:
-    o = it.get("output") or it
-    return o.get("why_it_matters", "")
+    return (it.get("output") or {}).get("why_it_matters", "")
 
 
 def _get_reason(it: dict[str, Any]) -> str:
-    o = it.get("output") or it
-    return o.get("action_reason", "")
+    return (it.get("output") or {}).get("action_reason", "")
 
 
 def build_report_html(
@@ -139,8 +139,7 @@ def build_report_html(
     """
 
 
-def _render_report_native(container: dict[str, Any]) -> None:
-    """In-app native Streamlit rendering of the brief."""
+def _render_native(container: dict[str, Any]) -> None:
     st.subheader(container.get("report_title", "SignalScout Research Brief"))
     col1, col2, col3 = st.columns(3)
     with col1:
@@ -153,7 +152,7 @@ def _render_report_native(container: dict[str, Any]) -> None:
 
     theme = container.get("theme_synthesis") or {}
     if theme:
-        with st.expander("Weekly theme synthesis", expanded=True):
+        with st.expander("Theme synthesis", expanded=True):
             for t in (theme.get("themes") or [])[:8]:
                 if isinstance(t, dict):
                     evidence = t.get("evidence") or [""]
@@ -167,15 +166,16 @@ def _render_report_native(container: dict[str, Any]) -> None:
     items = container.get("included_items") or []
     st.markdown("---")
     st.subheader("Included items")
+    st.caption("Score shown is the winning evaluator's. Open the Arena tab to see all three verdicts side-by-side.")
     if not items:
-        st.info("No items met the include threshold. Try another run.")
+        st.info("No items scored ≥ 70 this run. Try again or widen the limits.")
         return
 
     sorted_items = sorted(items, key=_get_score, reverse=True)
     for it in sorted_items:
         score = _get_score(it)
         title = (it.get("title") or "Item")[:80]
-        with st.expander(f"Score **{score}** — {title}…"):
+        with st.expander(f"Score **{score}** — {title}"):
             st.markdown(f"**Tags:** {_get_tags(it)}")
             st.markdown(f"**Summary:** {_get_summary(it)}")
             st.markdown(f"**Why it matters:** {_get_why(it)}")
@@ -183,26 +183,29 @@ def _render_report_native(container: dict[str, Any]) -> None:
             if reason:
                 st.markdown(f"*{reason}*")
             if it.get("url"):
-                st.markdown(f"[Link]({it['url']})")
+                st.markdown(f"[Open source ↗]({it['url']})")
 
 
 def render(
     *,
-    client,  # openai.OpenAI | None
+    client: OpenAI | None,
+    storage: Storage,
+    user_id: str,
     arxiv_limit: int,
     smol_limit: int,
     max_evaluate: int,
 ) -> None:
-    """Render the Run tab and wire the Run button through to the pipeline."""
+    """Render the Run tab and wire the Run button to ``pipeline.run_brief``."""
     st.markdown(
-        "Generate a fresh brief from arXiv cs.AI and Smol AI News. "
-        "The legacy single-prompt scorer is still in use here — the three-evaluator "
-        "arena lands in the next phase."
+        "Three evaluators — Skeptic, Scout, Operator — score each item in parallel. "
+        "The Run tab shows the brief; open **Arena** to watch the competition per item."
     )
 
-    run_clicked = st.button("Run workflow", type="primary")
+    if not user_id:
+        st.warning("Enter your email in the sidebar to enable learning across runs.")
+        return
 
-    if run_clicked:
+    if st.button("Run workflow", type="primary"):
         if client is None:
             st.error(
                 "No OpenAI API key. Use the default key (from app config) "
@@ -216,8 +219,10 @@ def render(
             progress.progress(done / max(1, total), text=label)
 
         with st.spinner("Running pipeline…"):
-            container = run_workflow(
+            container = run_brief(
                 client=client,
+                storage=storage,
+                user_id=user_id,
                 arxiv_limit=arxiv_limit,
                 smol_limit=smol_limit,
                 max_evaluate=max_evaluate,
@@ -235,22 +240,22 @@ def render(
             f"{container.get('report_title', 'Research Brief')} — "
             f"{container.get('export_batch_id', '')}"
         )
-        st.session_state.last_report_container = container
+        st.session_state.last_container = container
 
         st.success(
             f"Done. Evaluated **{container.get('evaluated_count', 0)}** items, "
             f"**{container.get('included_count', 0)}** included."
         )
 
-    container = st.session_state.get("last_report_container")
+    container = st.session_state.get("last_container")
     if container:
-        _render_report_native(container)
+        _render_native(container)
         with st.expander("HTML preview / export"):
             html = st.session_state.get("last_report_html", "")
             st.components.v1.html(html, height=700, scrolling=True)
             st.download_button(
                 "Download report (HTML)",
                 html,
-                file_name=f"research_brief_{container.get('export_batch_id', 'report')}.html",
+                file_name=f"signalscout_brief_{container.get('export_batch_id', 'report')}.html",
                 mime="text/html",
             )
