@@ -6,6 +6,7 @@ Phase 4 will replace it with a real theme.
 
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime
 from typing import Any
 
@@ -23,6 +24,7 @@ __all__ = [
     "agent_verdict_panel",
     "feedback_row",
     "disagreement_badge",
+    "bandit_phase_badge",
 ]
 
 
@@ -52,6 +54,49 @@ def disagreement_badge(disagreement: float) -> str:
         f'font-family:{_MONO};font-size:11px;letter-spacing:0.05em;">'
         f'DISAGREEMENT · {label}</span>'
     )
+
+
+_CALIBRATING_RE = re.compile(r"round\s+(\d+)\s+of\s+(\d+)", re.IGNORECASE)
+
+
+def bandit_phase_badge(winner_reason: str) -> str:
+    """Inline badge showing whether a pick was cold-start or learned.
+
+    Returns:
+    - CALIBRATING · N/10 in amber when ``winner_reason`` starts with
+      ``"Calibrating"``. N/10 is parsed from "round N of 10" in the reason,
+      falling back to just ``CALIBRATING`` if parsing fails.
+    - LEARNED in Aquamarine (muted) when ``winner_reason`` starts with
+      ``"Learned preference"``.
+    - Empty string for anything else — no badge rendered.
+
+    Matches the ``disagreement_badge`` visual style so the Arena row reads
+    as one pill cluster.
+    """
+    reason = (winner_reason or "").strip()
+    if reason.startswith("Calibrating"):
+        label = "CALIBRATING"
+        m = _CALIBRATING_RE.search(reason)
+        if m:
+            label = f"CALIBRATING · {m.group(1)}/{m.group(2)}"
+        color = "#FFB547"  # amber
+        return (
+            f'<span style="display:inline-block;padding:2px 10px;border-radius:12px;'
+            f'background:transparent;border:1px solid {color};color:{color};'
+            f'font-family:{_MONO};font-size:11px;letter-spacing:0.05em;">'
+            f'{label}</span>'
+        )
+    if reason.startswith("Learned preference"):
+        color = "#00F5D4"  # Aquamarine
+        # Intentionally quieter than the calibrating badge: 40% opacity border/text
+        # so it reads as "the normal case" not a flag.
+        return (
+            f'<span style="display:inline-block;padding:2px 10px;border-radius:12px;'
+            f'background:transparent;border:1px solid {color}66;color:{color}99;'
+            f'font-family:{_MONO};font-size:11px;letter-spacing:0.05em;">'
+            f'LEARNED</span>'
+        )
+    return ""
 
 
 def signal_card_header(item: Item) -> None:
