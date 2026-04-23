@@ -166,7 +166,7 @@ def _render_native(container: dict[str, Any]) -> None:
     items = container.get("included_items") or []
     st.markdown("---")
     st.subheader("Included items")
-    st.caption("Score shown is the winning evaluator's. Open the Arena tab to see all three verdicts side-by-side.")
+    st.caption("The score you see is the one SignalScout bet on. The Arena shows who disagreed.")
     if not items:
         st.info("No items scored ≥ 70 this run. Try again or widen the limits.")
         return

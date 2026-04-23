@@ -48,8 +48,7 @@ def render(*, storage: Storage | None = None, user_id: str | None = None) -> Non
 
     st.subheader("Arena")
     st.caption(
-        f"{len(arena_results)} items · sorted by disagreement (contested first). "
-        "The glowing column is the item's winner."
+        f"{len(arena_results)} items. Most contested first — that's where your judgment matters most."
     )
 
     # Moods — computed once, not per item.
