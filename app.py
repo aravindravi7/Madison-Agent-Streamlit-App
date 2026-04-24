@@ -18,6 +18,7 @@ from signalscout.email_brief import send_brief_email
 from signalscout.evaluators import EVALUATORS
 from signalscout.storage import Storage
 from signalscout.ui import arena_view, brief_view, learning_view
+from signalscout.ui.branding import render_page_header, render_sidebar_lockup
 from signalscout.ui.theme import inject_theme
 _DEFAULTS = {
     "user_email": "", "user_id": "", "openai_key_source": "default",
@@ -55,12 +56,7 @@ def _hash_email(email: str) -> str:
 
 
 def _render_sidebar(storage: Storage) -> tuple[OpenAI | None, str, int, int, int]:
-    st.sidebar.markdown(
-        "<div style=\"font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:24px;"
-        "line-height:1.1;margin-bottom:10px;color:#EAEAEA;\">"
-        "<span style=\"color:#00F5D4;margin-right:6px;\">📡</span>SignalScout</div>",
-        unsafe_allow_html=True,
-    )
+    render_sidebar_lockup()
     st.sidebar.header("Settings")
     demo_mode = st.sidebar.toggle(
         "Demo mode", value=st.session_state.demo_mode,
@@ -137,8 +133,7 @@ def main() -> None:
     storage.init_db()
     st.session_state["storage"] = storage
 
-    st.title("📡 SignalScout")
-    st.caption("Your taste, on autopilot.")
+    render_page_header()
 
     client, user_id, arxiv_limit, smol_limit, max_evaluate = _render_sidebar(storage)
 

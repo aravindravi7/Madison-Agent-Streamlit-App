@@ -106,12 +106,28 @@ def build_report_html(
         </table>
         """
 
+    # Dark container header with the text+emoji lockup. SVG isn't reliably
+    # supported in Gmail/Outlook, so we use the fallback lockup here by
+    # design. The dark band anchors the brand against the white email canvas.
+    header_html = (
+        '<div style="background:#0B0F1A;padding:28px 24px;text-align:center;'
+        'border-radius:12px 12px 0 0;">'
+        '<div style="font-family:\'Helvetica Neue\',Arial,sans-serif;'
+        'font-weight:700;font-size:28px;letter-spacing:-0.01em;color:#EAEAEA;">'
+        '<span style="color:#00F5D4;margin-right:10px;">📡</span>SignalScout'
+        '</div>'
+        '<div style="color:#9CA3AF;font-size:12px;margin-top:6px;">'
+        'Your taste, on autopilot.'
+        '</div>'
+        '</div>'
+    )
     return f"""
     <!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
     <body style="margin:0;font-family:Arial,sans-serif;background:#f6f7f9;color:#111;min-height:100vh;">
     <div style="font-family:Arial,sans-serif;background:#f6f7f9;padding:18px;color:#111;">
       <div style="max-width:900px;margin:0 auto;">
-        <div style="background:#fff;border:1px solid #e6e6e6;border-radius:12px;padding:16px;">
+        {header_html}
+        <div style="background:#fff;border:1px solid #e6e6e6;border-radius:0 0 12px 12px;padding:16px;">
           <div style="font-size:20px;font-weight:800;margin-bottom:6px;">{_esc(title)}</div>
           <div style="font-size:12px;color:#666;">
             <div><b>Batch:</b> {_esc(batch_id)}</div>
