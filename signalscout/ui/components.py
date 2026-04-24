@@ -105,13 +105,19 @@ def signal_card_header(item: Item) -> None:
     published = item.published_at.astimezone(UTC).strftime("%Y-%m-%d")
     source = item.source
     url = item.url
+    # Non-breaking space + white-space:nowrap keeps "open↗" as one token so
+    # the arrow never wraps to its own line.
+    open_link = (
+        f' · <a href="{_escape(url)}" target="_blank" '
+        f'style="color:#00F5D4;white-space:nowrap;">open&nbsp;↗</a>'
+        if url else ""
+    )
     st.markdown(
         f'<div style="margin:6px 0 2px 0;font-size:16px;font-weight:600;line-height:1.3;">'
         f'{_escape(title)}</div>'
-        f'<div style="font-family:{_MONO};font-size:11px;color:#9CA3AF;margin-bottom:10px;">'
-        f'{_escape(source)} · {published}'
-        + (f' · <a href="{_escape(url)}" target="_blank" style="color:#00F5D4;">open ↗</a>' if url else '')
-        + "</div>",
+        f'<div class="mono" style="font-size:11px;color:#9CA3AF;margin-bottom:10px;">'
+        f'{_escape(source)} · {published}{open_link}'
+        f'</div>',
         unsafe_allow_html=True,
     )
 

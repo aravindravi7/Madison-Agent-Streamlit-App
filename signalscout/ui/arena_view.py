@@ -62,11 +62,13 @@ def render(*, storage: Storage | None = None, user_id: str | None = None) -> Non
         item = items_by_id.get(result.item_id)
         if item is None:
             continue
-        _render_card(result, item, storage=storage, user_id=user_id)
-        st.markdown(
-            "<hr style='border:none;border-top:1px solid #2A2F45;margin:16px 0;'>",
-            unsafe_allow_html=True,
-        )
+        # Each item renders inside a bordered container that visually groups
+        # title → three panels → winner row → feedback buttons into one block.
+        with st.container(border=True):
+            _render_card(result, item, storage=storage, user_id=user_id)
+        # Small vertical gap between items. The border itself does the visual
+        # separation so we drop the horizontal rule.
+        st.markdown("<div style='height:8px;'></div>", unsafe_allow_html=True)
 
 
 def _render_mood_header(*, storage: Storage, user_id: str) -> None:
@@ -121,15 +123,21 @@ def _render_card(
     winner_label = winner_ev.name if winner_ev else result.winner_id
     reason_text = result.winner_reason or "Highest score among evaluators"
     phase_badge = C.bandit_phase_badge(result.winner_reason)
+    # Winner line + pills. Pills sit with 8px horizontal breathing room on
+    # either side so the row doesn't crowd.
     st.markdown(
-        f'<div style="margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">'
+        f'<div style="margin-top:14px;display:flex;align-items:center;flex-wrap:wrap;">'
         f'<span style="color:#EAEAEA;">Winner: <b>{_escape(winner_label)}</b>. '
         f'{_escape(reason_text)}</span>'
-        f"{phase_badge}"
-        f"{C.disagreement_badge(result.disagreement)}"
+        f'<span style="margin:0 8px;">{phase_badge}</span>'
+        f'<span style="margin:0 8px 0 0;">{C.disagreement_badge(result.disagreement)}</span>'
         f"</div>",
         unsafe_allow_html=True,
     )
+
+    # 16px breathing room before the feedback button row so the winner line
+    # doesn't crowd into the buttons.
+    st.markdown("<div style='height:16px;'></div>", unsafe_allow_html=True)
 
     if storage is not None and user_id:
         C.feedback_row(
