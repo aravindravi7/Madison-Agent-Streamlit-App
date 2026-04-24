@@ -1,3 +1,5 @@
+<img width="900" height="450" alt="signalscoutinaction" src="https://github.com/user-attachments/assets/e8b104dd-2d19-44f8-b158-42c04164e2c9" />
+
 # SignalScout
 
 **Your taste, on autopilot.**
