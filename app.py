@@ -55,6 +55,25 @@ def _hash_email(email: str) -> str:
     return hashlib.sha256(email.strip().lower().encode("utf-8")).hexdigest()[:16]
 
 
+def _render_author_watermark() -> None:
+    """Small attribution block with social links. Renders inside the sidebar."""
+    st.sidebar.markdown("---")
+    st.sidebar.markdown(
+        "<div style=\"font-family:'Space Grotesk',sans-serif;font-weight:500;"
+        "font-size:14px;color:#EAEAEA;margin:4px 0 10px 0;\">"
+        "Built by <span style=\"color:#00F5D4;font-weight:700;\">Aravind Ravi</span>"
+        "</div>",
+        unsafe_allow_html=True,
+    )
+    c1, c2 = st.sidebar.columns(2)
+    with c1:
+        st.link_button("GitHub", "https://github.com/aravindravi7", use_container_width=True)
+        st.link_button("Portfolio", "https://aravindravi.io/", use_container_width=True)
+    with c2:
+        st.link_button("LinkedIn", "https://www.linkedin.com/in/-aravindravi/", use_container_width=True)
+        st.link_button("Email", "mailto:aravindravi.academics@gmail.com", use_container_width=True)
+
+
 def _render_sidebar(storage: Storage) -> tuple[OpenAI | None, str, int, int, int]:
     render_sidebar_lockup()
     st.sidebar.header("Settings")
@@ -83,6 +102,8 @@ def _render_sidebar(storage: Storage) -> tuple[OpenAI | None, str, int, int, int
         user_id = st.session_state.user_id
         if user_id:
             st.sidebar.caption(f"user_id: `{user_id}`")
+
+    _render_author_watermark()
 
     st.sidebar.markdown("---")
     key_source = st.sidebar.radio(
