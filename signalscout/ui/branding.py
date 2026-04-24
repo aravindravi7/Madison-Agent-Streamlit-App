@@ -69,23 +69,34 @@ def render_page_header() -> None:
     """
     if LOCKUP_SVG_PATH.exists():
         uri = _svg_data_uri(LOCKUP_SVG_PATH)
+        # Lockup + tagline live in the same inline-block wrapper so the
+        # wrapper hugs the image's natural width (96px tall × ~2.5:1 aspect
+        # ≈ 240px). Tagline is centered inside that container, which puts
+        # its center directly under the logo's center.
         st.markdown(
-            f'<div style="margin:0 0 4px 0;">'
+            f'<div style="display:inline-block;margin:0 0 4px 0;">'
             f'<img src="{uri}" alt="SignalScout" style="height:96px;display:block;" />'
+            f'<div style="font-family:\'Space Grotesk\',sans-serif;font-weight:500;'
+            f'font-size:16px;color:#00F5D4;margin:4px 0 4px 0;text-align:center;">'
+            f'Your taste, on autopilot.</div>'
             f'</div>',
             unsafe_allow_html=True,
         )
     else:
         st.markdown(
+            '<div style="display:inline-block;text-align:center;">'
             '<div style="font-family:\'Space Grotesk\',sans-serif;font-weight:700;'
             'font-size:56px;line-height:1.1;margin:0 0 6px 0;color:#EAEAEA;">'
-            '<span style="color:#00F5D4;margin-right:10px;">📡</span>SignalScout</div>',
+            '<span style="color:#00F5D4;margin-right:10px;">📡</span>SignalScout</div>'
+            '<div style="font-family:\'Space Grotesk\',sans-serif;font-weight:500;'
+            'font-size:16px;color:#00F5D4;margin:4px 0 4px 0;">'
+            'Your taste, on autopilot.</div>'
+            '</div>',
             unsafe_allow_html=True,
         )
+    # Subtitle stays flush-left; it reads as a description, not a lockup
+    # element, so it shouldn't share the logo's centering.
     st.markdown(
-        '<div style="font-family:\'Space Grotesk\',sans-serif;font-weight:500;'
-        'font-size:16px;color:#00F5D4;margin:-4px 0 4px 0;">'
-        'Your taste, on autopilot.</div>'
         '<div style="font-family:\'Inter\',sans-serif;font-weight:400;'
         'font-size:14px;color:rgba(234,234,234,0.6);margin:4px 0 12px 0;'
         'max-width:720px;line-height:1.5;">'
