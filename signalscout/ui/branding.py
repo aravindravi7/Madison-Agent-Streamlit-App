@@ -44,37 +44,55 @@ def _svg_data_uri(path: Path) -> str:
 
 
 def render_sidebar_lockup() -> None:
-    """SVG lockup at the top of the sidebar. Falls back to text+📡 if missing."""
+    """SVG lockup at the top of the sidebar. Falls back to text+📡 if missing.
+
+    The packaged SVG has a 1500×1500 viewBox with internal whitespace;
+    displayed at 80px height so the actual lockup reads legibly at a glance.
+    """
     if LOCKUP_SVG_PATH.exists():
         uri = _svg_data_uri(LOCKUP_SVG_PATH)
         st.sidebar.markdown(
-            f'<div style="margin-bottom:14px;">'
-            f'<img src="{uri}" alt="SignalScout" style="height:48px;display:block;" />'
+            f'<div style="margin:-8px 0 14px 0;">'
+            f'<img src="{uri}" alt="SignalScout" style="height:80px;display:block;" />'
             f'</div>',
             unsafe_allow_html=True,
         )
     else:
-        _text_lockup(st.sidebar, font_size=24)
+        _text_lockup(st.sidebar, font_size=28)
 
 
 def render_page_header() -> None:
-    """Page title lockup using the SVG. Falls back to st.title() with emoji."""
+    """Page title lockup using the SVG. Falls back to st.title() with emoji.
+
+    Displayed at 120px height so the lockup reads at a glance from a
+    demo-distance. Tagline + subtitle render beneath.
+    """
     if LOCKUP_SVG_PATH.exists():
         uri = _svg_data_uri(LOCKUP_SVG_PATH)
         st.markdown(
-            f'<div style="margin:0 0 6px 0;">'
-            f'<img src="{uri}" alt="SignalScout" style="height:64px;display:block;" />'
+            f'<div style="margin:-16px 0 0 -16px;">'
+            f'<img src="{uri}" alt="SignalScout" style="height:120px;display:block;" />'
             f'</div>',
             unsafe_allow_html=True,
         )
     else:
         st.markdown(
             '<div style="font-family:\'Space Grotesk\',sans-serif;font-weight:700;'
-            'font-size:40px;line-height:1.1;margin:0 0 6px 0;color:#EAEAEA;">'
+            'font-size:56px;line-height:1.1;margin:0 0 6px 0;color:#EAEAEA;">'
             '<span style="color:#00F5D4;margin-right:10px;">📡</span>SignalScout</div>',
             unsafe_allow_html=True,
         )
-    st.caption("Your taste, on autopilot.")
+    st.markdown(
+        '<div style="font-family:\'Space Grotesk\',sans-serif;font-weight:500;'
+        'font-size:16px;color:#9CA3AF;margin:-4px 0 4px 0;">'
+        'Your taste, on autopilot.</div>'
+        '<div style="font-family:\'Inter\',sans-serif;font-weight:400;'
+        'font-size:14px;color:rgba(234,234,234,0.6);margin:4px 0 12px 0;'
+        'max-width:720px;line-height:1.5;">'
+        'SignalScout learns what matters to you, then decides what\'s worth your attention.'
+        '</div>',
+        unsafe_allow_html=True,
+    )
 
 
 def _text_lockup(container, *, font_size: int) -> None:
