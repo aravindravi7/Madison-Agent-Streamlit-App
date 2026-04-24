@@ -240,12 +240,15 @@ def _render_regret_curve(history: list[dict]) -> None:
     )
     fig.update_layout(
         height=280,
-        margin=dict(l=10, r=10, t=10, b=30),
+        margin=dict(l=50, r=10, t=10, b=40),
         paper_bgcolor=INK_BLACK,
         plot_bgcolor=INK_BLACK,
         font=dict(family="JetBrains Mono, monospace", color=MUTED, size=11),
         xaxis=dict(
-            title=None,
+            title=dict(
+                text="Decisions",
+                font=dict(family="Inter, sans-serif", color=MUTED, size=11),
+            ),
             showgrid=False,
             zeroline=False,
             showline=True,
@@ -254,7 +257,10 @@ def _render_regret_curve(history: list[dict]) -> None:
             tickformat=",.0f",
         ),
         yaxis=dict(
-            title=None,
+            title=dict(
+                text="Cumulative reward",
+                font=dict(family="Inter, sans-serif", color=MUTED, size=11),
+            ),
             showgrid=False,
             zeroline=True,
             zerolinecolor=PANEL_BORDER,
