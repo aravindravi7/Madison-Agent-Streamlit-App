@@ -121,8 +121,17 @@ def agent_verdict_panel(
     evaluator: Evaluator,
     is_winner: bool,
 ) -> None:
-    """Render one evaluator's column: name, score, confidence, reasoning."""
-    border = f"2px solid {evaluator.color}" if is_winner else "1px solid #2A2F45"
+    """Render one evaluator's column: name, score, confidence, reasoning.
+
+    Uses the ``.arena-panel`` class from the theme so all three columns in
+    a row have the same min-height; evaluators whose reasoning is shorter
+    don't leave their card shorter than the others.
+    """
+    border = (
+        f"2px solid {evaluator.color}"
+        if is_winner
+        else "1px solid rgba(234, 234, 234, 0.1)"
+    )
     glow = (
         f"0 0 16px {evaluator.color}55, 0 0 4px {evaluator.color}33"
         if is_winner
@@ -130,15 +139,16 @@ def agent_verdict_panel(
     )
     crown = " 🏆" if is_winner else ""
     st.markdown(
-        f'<div style="border:{border};border-radius:10px;padding:12px;box-shadow:{glow};'
-        f'background:#12172A;min-height:180px;">'
-        f'<div style="font-size:13px;color:#9CA3AF;margin-bottom:2px;">'
+        f'<div class="arena-panel" style="border:{border};border-radius:12px;padding:16px;'
+        f'box-shadow:{glow};background:#12172A;">'
+        f'<div style="font-family:\'Space Grotesk\',sans-serif;font-weight:500;font-size:18px;'
+        f'color:#EAEAEA;margin-bottom:6px;">'
         f'{evaluator.avatar} {_escape(evaluator.name)}{crown}</div>'
-        f'<div style="font-family:{_MONO};font-size:30px;font-weight:700;color:{evaluator.color};'
+        f'<div class="mono" style="font-size:32px;font-weight:700;color:{evaluator.color};'
         f'line-height:1.1;margin-bottom:4px;">{int(verdict.score)}</div>'
-        f'<div style="font-family:{_MONO};font-size:11px;color:#9CA3AF;margin-bottom:10px;">'
+        f'<div class="mono" style="font-size:11px;color:#9CA3AF;margin-bottom:12px;">'
         f'conf: {verdict.confidence:.2f} · {verdict.latency_ms}ms</div>'
-        f'<div style="font-size:13px;line-height:1.4;color:#EAEAEA;">'
+        f'<div style="font-size:13px;line-height:1.5;color:#EAEAEA;">'
         f'{_escape(verdict.reasoning or "")}</div>'
         f'</div>',
         unsafe_allow_html=True,

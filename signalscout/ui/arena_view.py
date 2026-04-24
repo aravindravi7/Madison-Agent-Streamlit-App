@@ -82,12 +82,12 @@ def _render_mood_header(*, storage: Storage, user_id: str) -> None:
     for col, (ev, mood) in zip(cols, entries):
         with col:
             st.markdown(
-                f'<div style="padding:8px 12px;border:1px solid #2A2F45;border-radius:8px;'
-                f'background:#12172A;">'
-                f'<div style="color:#9CA3AF;font-size:11px;margin-bottom:2px;font-family:{_MONO};">'
+                f'<div style="padding:12px 14px;border:1px solid rgba(234, 234, 234, 0.1);'
+                f'border-radius:12px;background:#12172A;">'
+                f'<div class="mono" style="color:#9CA3AF;font-size:11px;margin-bottom:4px;">'
                 f'{ev.avatar} {_escape(ev.name)} · MOOD</div>'
                 f'<div style="color:{ev.color};font-size:15px;font-weight:600;">{_escape(mood["label"])}</div>'
-                f'<div style="color:#9CA3AF;font-size:11px;font-family:{_MONO};">{_escape(mood["detail"])}</div>'
+                f'<div class="mono" style="color:#9CA3AF;font-size:11px;">{_escape(mood["detail"])}</div>'
                 f'</div>',
                 unsafe_allow_html=True,
             )

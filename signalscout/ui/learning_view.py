@@ -188,15 +188,17 @@ def _render_leaderboard(bandit: TasteBandit, history: list[dict]) -> None:
         pct = int(round(positive_rate * 100))
         with col:
             st.markdown(
-                f'<div style="padding:12px;border:1px solid {PANEL_BORDER};'
-                f'border-radius:10px;background:{PANEL_BG};">'
-                f'<div style="color:{MUTED};font-size:11px;font-family:{_MONO};'
-                f'margin-bottom:4px;">{ev.avatar} {ev.name.upper()}</div>'
-                f'<div style="color:{ev.color};font-family:{_MONO};font-size:28px;'
+                f'<div class="leaderboard-card" style="padding:16px;'
+                f'border:1px solid rgba(234, 234, 234, 0.1);'
+                f'border-radius:12px;background:{PANEL_BG};">'
+                f'<div style="font-family:\'Space Grotesk\',sans-serif;font-weight:500;'
+                f'font-size:16px;color:{ALABASTER};margin-bottom:10px;">'
+                f'{ev.avatar} {ev.name.upper()}</div>'
+                f'<div class="mono" style="color:{ev.color};font-size:32px;'
                 f'font-weight:700;line-height:1.1;">{pulls}</div>'
-                f'<div style="color:{MUTED};font-family:{_MONO};font-size:11px;margin-bottom:8px;">pulls</div>'
-                f'<div style="color:{ALABASTER};font-family:{_MONO};font-size:14px;">{pct}% positive</div>'
-                f'<div style="color:{trend_color};font-family:{_MONO};font-size:12px;margin-top:6px;">'
+                f'<div class="mono" style="color:{MUTED};font-size:11px;margin-bottom:10px;">pulls</div>'
+                f'<div class="mono" style="color:{ALABASTER};font-size:14px;">{pct}% positive</div>'
+                f'<div class="mono" style="color:{trend_color};font-size:12px;margin-top:6px;">'
                 f'{trend}</div>'
                 f"</div>",
                 unsafe_allow_html=True,
