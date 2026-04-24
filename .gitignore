@@ -5,3 +5,9 @@
 __pycache__/
 *.pyc
 .DS_Store
+signalscout.db
+signalscout.db-journal
+signalscout.db-wal
+signalscout.db-shm
+.pytest_cache/
+logs/
