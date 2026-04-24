@@ -84,7 +84,7 @@ def render_page_header() -> None:
         )
     st.markdown(
         '<div style="font-family:\'Space Grotesk\',sans-serif;font-weight:500;'
-        'font-size:16px;color:#9CA3AF;margin:-4px 0 4px 0;">'
+        'font-size:16px;color:#00F5D4;margin:-4px 0 4px 0;">'
         'Your taste, on autopilot.</div>'
         '<div style="font-family:\'Inter\',sans-serif;font-weight:400;'
         'font-size:14px;color:rgba(234,234,234,0.6);margin:4px 0 12px 0;'

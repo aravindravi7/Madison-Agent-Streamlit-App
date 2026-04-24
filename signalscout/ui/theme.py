@@ -164,9 +164,16 @@ def _css() -> str:
         font-family: 'Inter', system-ui, sans-serif !important;
     }}
 
-    /* Metric numbers in JetBrains Mono */
+    /* Metric numbers in JetBrains Mono; size capped so Run-tab
+       Batch/Generated/Included values don't dominate the page. */
     [data-testid="stMetricValue"] {{
         font-family: 'JetBrains Mono', monospace !important;
+        font-size: 24px !important;
+        line-height: 1.2 !important;
+    }}
+    [data-testid="stMetricValue"] > div {{
+        font-size: 24px !important;
+        line-height: 1.2 !important;
     }}
     [data-testid="stMetricLabel"] {{
         font-family: 'Inter', system-ui, sans-serif !important;

@@ -102,8 +102,6 @@ def _render_sidebar(storage: Storage) -> tuple[OpenAI | None, str, int, int, int
         if user_id:
             st.sidebar.caption(f"user_id: `{user_id}`")
 
-    _render_author_watermark()
-
     client = _get_client()
 
     st.sidebar.markdown("---")
@@ -128,6 +126,9 @@ def _render_sidebar(storage: Storage) -> tuple[OpenAI | None, str, int, int, int
                 st.session_state.last_report_subject, creds,
             )
             (st.sidebar.success if ok else st.sidebar.error)(msg)
+
+    # Author block lives at the very bottom of the sidebar.
+    _render_author_watermark()
 
     return client, user_id, int(arxiv_limit), int(smol_limit), int(max_evaluate)
 
