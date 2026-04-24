@@ -168,7 +168,7 @@ def _top_tags_split(
 
 def _render_leaderboard(bandit: TasteBandit, history: list[dict]) -> None:
     st.subheader("Evaluator leaderboard")
-    st.caption("Which evaluator you've trusted most, and how often their picks earn a 👍.")
+    st.caption("Which evaluator you've trusted most, and how often their picks were validated.")
 
     win_rates = bandit.get_win_rates()
     per_arm_outcomes = _outcomes_by_arm(history)
