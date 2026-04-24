@@ -17,7 +17,7 @@ from signalscout.demo_seed import DEMO_USER_ID, seed_demo_user
 from signalscout.email_brief import send_brief_email
 from signalscout.evaluators import EVALUATORS
 from signalscout.storage import Storage
-from signalscout.ui import arena_view, brief_view, learning_view
+from signalscout.ui import about_view, arena_view, brief_view, learning_view
 from signalscout.ui.branding import render_page_header, render_sidebar_lockup
 from signalscout.ui.theme import inject_theme
 _DEFAULTS = {
@@ -145,7 +145,9 @@ def main() -> None:
             storage=storage,
         )
 
-    run_tab, arena_tab, learning_tab = st.tabs(["Run", "Arena", "Learning"])
+    run_tab, arena_tab, learning_tab, about_tab = st.tabs(
+        ["Run", "Arena", "Learning", "About"]
+    )
     with run_tab:
         brief_view.render(
             client=client, storage=storage, user_id=user_id,
@@ -155,6 +157,8 @@ def main() -> None:
         arena_view.render(storage=storage, user_id=user_id)
     with learning_tab:
         learning_view.render(storage=storage, bandit=bandit, user_id=user_id, client=client)
+    with about_tab:
+        about_view.render()
 
 
 main()
