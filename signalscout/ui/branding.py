@@ -46,14 +46,14 @@ def _svg_data_uri(path: Path) -> str:
 def render_sidebar_lockup() -> None:
     """SVG lockup at the top of the sidebar. Falls back to text+📡 if missing.
 
-    The packaged SVG has a 1500×1500 viewBox with internal whitespace;
-    displayed at 80px height so the actual lockup reads legibly at a glance.
+    The packaged SVG is the cropped lockup (~2.5:1 aspect) — 56px tall
+    renders legibly in a 280px sidebar without taking over the column.
     """
     if LOCKUP_SVG_PATH.exists():
         uri = _svg_data_uri(LOCKUP_SVG_PATH)
         st.sidebar.markdown(
-            f'<div style="margin:-8px 0 14px 0;">'
-            f'<img src="{uri}" alt="SignalScout" style="height:80px;display:block;" />'
+            f'<div style="margin:0 0 14px 0;">'
+            f'<img src="{uri}" alt="SignalScout" style="height:56px;display:block;" />'
             f'</div>',
             unsafe_allow_html=True,
         )
@@ -62,16 +62,16 @@ def render_sidebar_lockup() -> None:
 
 
 def render_page_header() -> None:
-    """Page title lockup using the SVG. Falls back to st.title() with emoji.
+    """Page title lockup using the SVG. Falls back to text+emoji if missing.
 
-    Displayed at 120px height so the lockup reads at a glance from a
-    demo-distance. Tagline + subtitle render beneath.
+    96px tall against the cropped wide aspect reads at a glance from
+    demo-distance without crowding the tagline line beneath.
     """
     if LOCKUP_SVG_PATH.exists():
         uri = _svg_data_uri(LOCKUP_SVG_PATH)
         st.markdown(
-            f'<div style="margin:-16px 0 0 -16px;">'
-            f'<img src="{uri}" alt="SignalScout" style="height:120px;display:block;" />'
+            f'<div style="margin:0 0 4px 0;">'
+            f'<img src="{uri}" alt="SignalScout" style="height:96px;display:block;" />'
             f'</div>',
             unsafe_allow_html=True,
         )
