@@ -47,7 +47,7 @@ _FONT_IMPORT = (
     "https://fonts.googleapis.com/css2?"
     "family=Inter:wght@400;500;600&"
     "family=JetBrains+Mono:wght@400&"
-    "family=Space+Grotesk:wght@500;700&display=swap"
+    "family=Space+Grotesk:wght@500;600;700&display=swap"
 )
 
 
@@ -106,7 +106,7 @@ def _css() -> str:
         padding-top: 1rem;
     }}
 
-    /* Tab styling — Space Grotesk 500, 16px; Aquamarine active underline */
+    /* Tab styling — Space Grotesk 600, 18px; Aquamarine 3px active underline */
     .stTabs [data-baseweb="tab-list"] {{
         gap: 24px;
         border-bottom: 1px solid rgba(234, 234, 234, 0.1);
@@ -114,12 +114,12 @@ def _css() -> str:
     }}
     .stTabs [data-baseweb="tab"] {{
         font-family: 'Space Grotesk', 'Inter', sans-serif !important;
-        font-weight: 500 !important;
-        font-size: 16px !important;
+        font-weight: 600 !important;
+        font-size: 18px !important;
         color: {_ALABASTER} !important;
         opacity: 0.6;
-        padding: 8px 4px 10px 4px !important;
-        border-bottom: 2px solid transparent !important;
+        padding: 10px 6px 12px 6px !important;
+        border-bottom: 3px solid transparent !important;
         transition: opacity 0.15s ease, color 0.15s ease, border-color 0.15s ease;
     }}
     .stTabs [data-baseweb="tab"]:hover {{
@@ -129,7 +129,7 @@ def _css() -> str:
         color: {_AQUAMARINE} !important;
         opacity: 1;
         font-weight: 700 !important;
-        border-bottom: 2px solid {_AQUAMARINE} !important;
+        border-bottom: 3px solid {_AQUAMARINE} !important;
     }}
     .stTabs [data-baseweb="tab-panel"] {{
         padding-top: 12px !important;
