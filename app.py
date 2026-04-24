@@ -21,7 +21,7 @@ from signalscout.ui import about_view, arena_view, brief_view, learning_view
 from signalscout.ui.branding import render_page_header, render_sidebar_lockup
 from signalscout.ui.theme import inject_theme
 _DEFAULTS = {
-    "user_email": "", "user_id": "", "openai_key_source": "default",
+    "user_email": "", "user_id": "",
     "demo_mode": False, "last_report_html": None,
     "last_report_subject": "", "last_container": None,
 }
@@ -44,9 +44,8 @@ def _gmail_creds() -> tuple[str, str] | None:
     return (user, pwd) if user and pwd else None
 
 
-def _get_client(key_source: str, own_key: str) -> OpenAI | None:
-    if key_source == "own" and own_key:
-        return OpenAI(api_key=own_key)
+def _get_client() -> OpenAI | None:
+    """Build an OpenAI client from the app-config secret. Returns None if unset."""
     default = _secret("OPENAI_API_KEY")
     return OpenAI(api_key=default) if default else None
 
@@ -105,18 +104,7 @@ def _render_sidebar(storage: Storage) -> tuple[OpenAI | None, str, int, int, int
 
     _render_author_watermark()
 
-    st.sidebar.markdown("---")
-    key_source = st.sidebar.radio(
-        "OpenAI API Key", options=["default", "own"],
-        format_func=lambda x: "Use default key (app config)" if x == "default" else "Use my own key",
-        index=0 if st.session_state.openai_key_source == "default" else 1,
-        disabled=demo_mode, help="Demo mode forces the default key.",
-    )
-    st.session_state.openai_key_source = key_source if not demo_mode else "default"
-    own_key = ""
-    if key_source == "own" and not demo_mode:
-        own_key = st.sidebar.text_input("Your OpenAI API Key", type="password")
-    client = _get_client(st.session_state.openai_key_source, own_key)
+    client = _get_client()
 
     st.sidebar.markdown("---")
     st.sidebar.subheader("Data source limits")
